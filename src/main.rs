@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use axum::{self};
-use config::Config;
+use config::{DATABASE_URL, HOST, PORT};
 use route::create_router;
 use sqlx::{postgres::PgPoolOptions, Pool, Postgres};
 use tokio::net::TcpListener;
@@ -20,13 +20,12 @@ pub struct AppState {
 #[tokio::main]
 async fn main() {
     dotenv::dotenv().ok();
-    let config = Config::init();
 
     tracing_subscriber::fmt().init();
 
     let pool = match PgPoolOptions::new()
         .max_connections(10)
-        .connect(&config.database_url)
+        .connect(&DATABASE_URL)
         .await
     {
         Ok(pool) => {
@@ -39,13 +38,13 @@ async fn main() {
         }
     };
 
-    let tcp_listener = TcpListener::bind(&format!("{}:{}", &config.host, &config.port))
+    let tcp_listener = TcpListener::bind(&format!("{}:{}", *HOST, *PORT))
         .await
         .expect("Unable to connect to the server");
 
     tracing::info!("Listening on {}", tcp_listener.local_addr().unwrap());
 
-    let app = create_router(Arc::new(AppState { db: pool.clone() }));
+    let app = create_router(Arc::new(AppState { db: pool }));
 
     axum::serve(tcp_listener, app)
         .await

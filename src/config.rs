@@ -1,20 +1,16 @@
-#[derive(Debug, Clone)]
-pub struct Config {
-    pub port: u16,
-    pub host: String,
-    pub database_url: String,
+use lazy_static::lazy_static;
+use std::env;
+
+fn get_env(key: &str) -> String {
+    match env::var(key) {
+        Ok(val) => val,
+        Err(_) => panic!("{} must be set", key),
+    }
 }
 
-impl Config {
-    pub fn init() -> Config {
-        let port: String = std::env::var("PORT").expect("PORT must be set");
-        let host: String = std::env::var("HOST").expect("HOST must be set");
-        let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-
-        Config {
-            port: port.parse::<u16>().unwrap(),
-            host,
-            database_url,
-        }
-    }
+lazy_static! {
+    pub static ref HOST: String = get_env("HOST");
+    pub static ref PORT: String = get_env("PORT");
+    pub static ref DATABASE_URL: String = get_env("DATABASE_URL");
+    pub static ref JWT_SECRET: String = get_env("JWT_SECRET");
 }

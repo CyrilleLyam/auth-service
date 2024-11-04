@@ -1,12 +1,19 @@
-use axum::{extract::Json, http::StatusCode, response::IntoResponse};
-use serde::Deserialize;
+use std::sync::Arc;
+
+use axum::{
+    extract::{Json, State},
+    http::StatusCode,
+    response::IntoResponse,
+};
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use validator::Validate;
 use validator_derive::Validate;
 
 use crate::{
     response::{error_response, success_response, validation_errors_to_json},
-    service::hash_password,
+    service::{encode_jwt, hash_password},
+    AppState,
 };
 
 #[derive(Deserialize, Validate)]
@@ -19,7 +26,15 @@ pub struct RegisterPayload {
     password: String,
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct Claims {
+    pub exp: usize,
+    pub iat: usize,
+    pub email: String,
+}
+
 pub async fn register(
+    State(app_state): State<Arc<AppState>>,
     Json(payload): Json<RegisterPayload>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     // Validate the payload
@@ -43,15 +58,33 @@ pub async fn register(
         }
     };
 
-    Ok((
-        StatusCode::CREATED,
-        Json(success_response(
-            "User registered",
-            json!({
-                "username": payload.username,
-                "email": payload.email,
-                "password": password,
-            }),
+    let query_result = sqlx::query!(
+        r#"
+        INSERT INTO users (username, email, password)
+        VALUES ($1, $2, $3)
+        RETURNING id
+        "#,
+        payload.username,
+        payload.email,
+        password,
+    )
+    .fetch_one(&app_state.db)
+    .await;
+
+    match query_result {
+        Ok(record) => Ok((
+            StatusCode::CREATED,
+            Json(success_response(
+                "User registered",
+                json!({ "id": record.id }),
+            )),
         )),
-    ))
+        Err(e) => {
+            eprintln!("Failed to execute query: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(error_response("Failed to register user", json!({}))),
+            ))
+        }
+    }
 }
